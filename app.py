@@ -88,13 +88,13 @@ def create_app(config: dict | None = None) -> Flask:
 
     _epoch = datetime.min.replace(tzinfo=timezone.utc)
 
-    def _pin_sort_key(n):
+    def _pin_sort_key(note):
         # Bucket 0 = pinned (first), bucket 1 = unpinned (second).
         # Negate timestamps so newer sorts lower → ascending sort gives newest-first within each bucket.
-        if n.get("pinned"):
-            ts = n.get("pinned_at") or _epoch
+        if note.get("pinned"):
+            ts = note.get("pinned_at") or _epoch
             return (0, -ts.timestamp())
-        ts = n.get("updated_at") or _epoch
+        ts = note.get("updated_at") or _epoch
         return (1, -ts.timestamp())
 
     @app.route("/")
@@ -140,11 +140,11 @@ def create_app(config: dict | None = None) -> Flask:
             return redirect(url_for("home"))
         return render_template("new_note.html")
 
-    @app.route("/notes/<int:idx>/pin", methods=["POST"])
+    @app.route("/notes/<int:note_index>/pin", methods=["POST"])
     @login_required
-    def pin_note(idx):
+    def pin_note(note_index):
         try:
-            note = app.notes[idx]
+            note = app.notes[note_index]
         except IndexError:
             abort(404)
         if note.get("pinned"):
