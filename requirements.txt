@@ -1,2 +1,4 @@
 Flask==3.0.3
+flask-login
+flask-sqlalchemy
 pytest==8.3.3
