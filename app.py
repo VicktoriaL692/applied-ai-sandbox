@@ -5,7 +5,9 @@ describe exactly what "done" means.
 """
 from __future__ import annotations
 
-from flask import Flask, render_template, request, redirect, url_for
+from datetime import datetime, timezone
+
+from flask import Flask, render_template, request, redirect, url_for, abort
 from flask_login import login_required, login_user, logout_user, current_user
 
 from models import db, login_manager, User
@@ -84,6 +86,17 @@ def create_app(config: dict | None = None) -> Flask:
 
     # --- note routes ---
 
+    _epoch = datetime.min.replace(tzinfo=timezone.utc)
+
+    def _pin_sort_key(n):
+        # Bucket 0 = pinned (first), bucket 1 = unpinned (second).
+        # Negate timestamps so newer sorts lower → ascending sort gives newest-first within each bucket.
+        if n.get("pinned"):
+            ts = n.get("pinned_at") or _epoch
+            return (0, -ts.timestamp())
+        ts = n.get("updated_at") or _epoch
+        return (1, -ts.timestamp())
+
     @app.route("/")
     @login_required
     def home():
@@ -91,6 +104,7 @@ def create_app(config: dict | None = None) -> Flask:
             notes = [n for n in app.notes if n.get("user_id") == current_user.id]
         else:
             notes = app.notes
+        notes = sorted(notes, key=_pin_sort_key)
         return render_template("home.html", notes=notes)
 
     @app.route("/notes/new", methods=["GET", "POST"])
@@ -112,12 +126,34 @@ def create_app(config: dict | None = None) -> Flask:
                     title_error=title_error,
                     body_error=body_error,
                 )
-            note = {"title": title, "body": body, "tags": tags}
+            note = {
+                "title": title,
+                "body": body,
+                "tags": tags,
+                "pinned": False,
+                "pinned_at": None,
+                "updated_at": datetime.now(timezone.utc),
+            }
             if current_user.is_authenticated:
                 note["user_id"] = current_user.id
             app.notes.append(note)
             return redirect(url_for("home"))
         return render_template("new_note.html")
+
+    @app.route("/notes/<int:idx>/pin", methods=["POST"])
+    @login_required
+    def pin_note(idx):
+        try:
+            note = app.notes[idx]
+        except IndexError:
+            abort(404)
+        if note.get("pinned"):
+            note["pinned"] = False
+            note["pinned_at"] = None
+        else:
+            note["pinned"] = True
+            note["pinned_at"] = datetime.now(timezone.utc)
+        return redirect(url_for("home"))
 
     # TASK 02 will add a /notes/<idx>/delete route here.
 
